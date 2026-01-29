@@ -3,6 +3,54 @@ import { useApi, apiPost, apiDelete } from '../hooks/useApi'
 
 const LORA_TYPES = ['character', 'style', 'concept']
 
+function TrainingProgressBar({ job }) {
+  const progress = job.steps > 0 ? (job.current_step / job.steps) * 100 : 0
+  const isRunning = job.status === 'running'
+  const isCompleted = job.status === 'completed'
+  const isFailed = job.status === 'failed'
+
+  // Estimate time remaining (rough estimate: ~1 step per second on average)
+  const stepsRemaining = job.steps - job.current_step
+  const secondsRemaining = stepsRemaining
+  const formatTime = (seconds) => {
+    if (seconds < 60) return `${seconds}s`
+    if (seconds < 3600) return `${Math.floor(seconds / 60)}m ${seconds % 60}s`
+    return `${Math.floor(seconds / 3600)}h ${Math.floor((seconds % 3600) / 60)}m`
+  }
+
+  const barColor = isCompleted ? 'bg-green-500' : isFailed ? 'bg-red-500' : 'bg-blue-500'
+  const barBg = isCompleted ? 'bg-green-900' : isFailed ? 'bg-red-900' : 'bg-gray-700'
+
+  return (
+    <div className="mt-3">
+      <div className="flex justify-between text-sm mb-1">
+        <span className="text-gray-300">
+          {isCompleted ? '✓ Completed' : isFailed ? '✗ Failed' : `Step ${job.current_step.toLocaleString()} / ${job.steps.toLocaleString()}`}
+        </span>
+        <span className="text-gray-400">
+          {isRunning && stepsRemaining > 0 && `~${formatTime(secondsRemaining)} remaining`}
+          {isCompleted && 'Done!'}
+          {isFailed && job.error}
+        </span>
+      </div>
+      <div className={`h-3 ${barBg} rounded-full overflow-hidden`}>
+        <div
+          className={`h-full ${barColor} rounded-full transition-all duration-500 ${isRunning ? 'animate-pulse' : ''}`}
+          style={{ width: `${isCompleted ? 100 : progress}%` }}
+        />
+      </div>
+      <div className="flex justify-between text-xs text-gray-500 mt-1">
+        <span>{progress.toFixed(1)}%</span>
+        {isRunning && job.current_step > 0 && (
+          <span>
+            {((job.current_step / Math.max(1, (Date.now() - new Date(job.started_at).getTime()) / 1000)) || 0).toFixed(1)} steps/sec
+          </span>
+        )}
+      </div>
+    </div>
+  )
+}
+
 export default function Training() {
   const { data: datasets } = useApi('/datasets')
   const { data: instances } = useApi('/instances')
@@ -158,40 +206,52 @@ export default function Training() {
       ) : (
         <div className="space-y-4">
           {jobs?.map(job => (
-            <div key={job.id} className="bg-gray-800 p-4 rounded">
+            <div key={job.id} className={`bg-gray-800 p-4 rounded border-l-4 ${
+              job.status === 'running' ? 'border-blue-500' :
+              job.status === 'completed' ? 'border-green-500' :
+              job.status === 'failed' ? 'border-red-500' :
+              'border-yellow-500'
+            }`}>
               <div className="flex justify-between items-start">
-                <div>
+                <div className="flex-1">
                   <div className="flex items-center gap-2">
-                    <span className={`w-2 h-2 rounded-full ${statusColors[job.status]}`}></span>
-                    <p className="font-medium">{job.lora_name}</p>
-                    <span className="text-sm text-gray-400">({job.lora_type})</span>
+                    <span className={`w-2 h-2 rounded-full ${statusColors[job.status]} ${job.status === 'running' ? 'animate-pulse' : ''}`}></span>
+                    <p className="font-medium text-lg">{job.lora_name}</p>
+                    <span className="text-sm px-2 py-0.5 bg-gray-700 rounded">{job.lora_type}</span>
+                    <span className={`text-xs px-2 py-0.5 rounded ${
+                      job.status === 'running' ? 'bg-blue-600' :
+                      job.status === 'completed' ? 'bg-green-600' :
+                      job.status === 'failed' ? 'bg-red-600' :
+                      'bg-yellow-600'
+                    }`}>
+                      {job.status.toUpperCase()}
+                    </span>
                   </div>
-                  <p className="text-sm text-gray-400 mt-1">
-                    Dataset: {job.dataset_name} • {job.steps} steps • {job.resolution}px
-                  </p>
-                  {job.status === 'running' && (
-                    <div className="mt-2">
-                      <div className="h-2 bg-gray-700 rounded overflow-hidden">
-                        <div
-                          className="h-full bg-blue-500 transition-all"
-                          style={{ width: `${(job.current_step / job.steps) * 100}%` }}
-                        ></div>
-                      </div>
-                      <p className="text-xs text-gray-400 mt-1">
-                        Step {job.current_step} / {job.steps}
-                      </p>
-                    </div>
-                  )}
-                  {job.error && (
-                    <p className="text-sm text-red-400 mt-1">{job.error}</p>
-                  )}
+                  <div className="flex flex-wrap gap-4 text-sm text-gray-400 mt-2">
+                    <span>📁 {job.dataset_name}</span>
+                    <span>🔄 {job.steps.toLocaleString()} steps</span>
+                    <span>📐 {job.resolution}px</span>
+                    <span>🧮 dim={job.network_dim}</span>
+                    <span>📊 lr={job.learning_rate}</span>
+                  </div>
+                  <TrainingProgressBar job={job} />
                 </div>
-                <button
-                  onClick={() => deleteJob(job.id)}
-                  className="bg-red-600 hover:bg-red-700 px-3 py-1 rounded text-sm"
-                >
-                  Delete
-                </button>
+                <div className="flex flex-col gap-2 ml-4">
+                  {job.status === 'running' && (
+                    <button
+                      onClick={() => deleteJob(job.id)}
+                      className="bg-yellow-600 hover:bg-yellow-700 px-3 py-1 rounded text-sm"
+                    >
+                      Cancel
+                    </button>
+                  )}
+                  <button
+                    onClick={() => deleteJob(job.id)}
+                    className="bg-red-600 hover:bg-red-700 px-3 py-1 rounded text-sm"
+                  >
+                    Delete
+                  </button>
+                </div>
               </div>
             </div>
           ))}
