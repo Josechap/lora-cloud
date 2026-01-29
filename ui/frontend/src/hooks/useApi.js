@@ -38,3 +38,12 @@ export async function apiDelete(endpoint) {
   if (!res.ok) throw new Error('API error')
   return res.json()
 }
+
+export async function apiGet(endpoint) {
+  const res = await fetch(`/api${endpoint}`)
+  if (!res.ok) {
+    const data = await res.json().catch(() => ({}))
+    throw new Error(data.detail || 'API error')
+  }
+  return res.json()
+}
