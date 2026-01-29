@@ -6,7 +6,7 @@ const LORA_TYPES = ['character', 'style', 'concept']
 export default function Training() {
   const { data: datasets } = useApi('/datasets')
   const { data: instances } = useApi('/instances')
-  const { data: jobs, refetch } = useApi('/training')
+  const { data: jobs, refetch } = useApi('/training', { pollInterval: 5000 })
 
   const [config, setConfig] = useState({
     dataset_name: '',

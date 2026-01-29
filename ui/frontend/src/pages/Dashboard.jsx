@@ -14,12 +14,21 @@ const STATUS_COLORS = {
 }
 
 export default function Dashboard() {
-  const { data: instances, loading, refetch } = useApi('/instances')
+  const { data: instances, loading, refetch } = useApi('/instances', { pollInterval: 10000 })
   const [launching, setLaunching] = useState(false)
   const [selectedGpu, setSelectedGpu] = useState(GPU_PRESETS[0])
   const [sshInfo, setSshInfo] = useState(null)
 
   const launchInstance = async (image, name) => {
+    const confirmed = confirm(
+      `Launch ${name} instance?\n\n` +
+      `GPU: ${selectedGpu.name}\n` +
+      `Max price: $${selectedGpu.maxPrice}/hr\n` +
+      `Disk: 50GB\n\n` +
+      `You will be charged for as long as it runs.`
+    )
+    if (!confirmed) return
+
     setLaunching(true)
     try {
       await apiPost('/instances/launch', {
@@ -89,6 +98,15 @@ export default function Dashboard() {
           </button>
         </div>
       </div>
+
+      {instances?.length > 0 && (
+        <div className="bg-yellow-900/30 border border-yellow-600 p-4 rounded mb-4">
+          <p className="text-yellow-300">
+            💰 Estimated running cost: <strong>${instances.reduce((sum, i) => sum + (i.dph_total || 0), 0).toFixed(2)}/hr</strong>
+            {' '}(${(instances.reduce((sum, i) => sum + (i.dph_total || 0), 0) * 24).toFixed(2)}/day)
+          </p>
+        </div>
+      )}
 
       <h2 className="text-xl font-semibold mb-4">Active Instances ({instances?.length || 0})</h2>
       {instances?.length === 0 ? (
