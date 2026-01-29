@@ -14,9 +14,9 @@ app.add_middleware(
     allow_headers=["*"],
 )
 
-app.include_router(instances_router)
-app.include_router(datasets_router)
-app.include_router(loras_router)
+app.include_router(instances_router, prefix="/api")
+app.include_router(datasets_router, prefix="/api")
+app.include_router(loras_router, prefix="/api")
 
 @app.get("/health")
 def health():

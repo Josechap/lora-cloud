@@ -38,16 +38,25 @@ async def launch_instance(req: LaunchRequest):
         max_price=req.max_price
     )
     if not offers:
-        raise HTTPException(404, "No GPUs available at that price")
+        raise HTTPException(404, f"No {req.gpu_type} GPUs available under ${req.max_price}/hr")
 
-    # Pick cheapest
-    offer = min(offers, key=lambda x: x.get("dph_total", 999))
-    result = await vast_service.rent_instance(
-        offer_id=offer["id"],
-        image=req.image,
-        disk_gb=req.disk_gb
-    )
-    return result
+    # Sort by price and try up to 3 offers (in case some are taken)
+    sorted_offers = sorted(offers, key=lambda x: x.get("dph_total", 999))
+
+    last_error = None
+    for offer in sorted_offers[:3]:
+        try:
+            result = await vast_service.rent_instance(
+                offer_id=offer["id"],
+                image=req.image,
+                disk_gb=req.disk_gb
+            )
+            return result
+        except Exception as e:
+            last_error = str(e)
+            continue
+
+    raise HTTPException(503, f"Could not rent instance: {last_error}")
 
 @router.delete("/{instance_id}")
 async def destroy_instance(instance_id: int):

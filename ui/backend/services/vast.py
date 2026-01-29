@@ -16,16 +16,22 @@ class VastService:
         max_price: float = 1.0
     ) -> list[dict]:
         """Search for available GPU instances."""
-        async with httpx.AsyncClient() as client:
+        async with httpx.AsyncClient(follow_redirects=True) as client:
             resp = await client.get(
-                f"{VAST_API_URL}/bundles",
-                headers=self.headers,
-                params={
-                    "q": f"gpu_name={gpu_name} gpu_ram>={min_gpu_ram} dph<={max_price}"
-                }
+                f"{VAST_API_URL}/bundles/",
+                headers=self.headers
             )
             resp.raise_for_status()
-            return resp.json().get("offers", [])
+            offers = resp.json().get("offers", [])
+            # Filter offers in Python - only rentable ones
+            filtered = [
+                o for o in offers
+                if gpu_name.lower() in o.get("gpu_name", "").lower()
+                and o.get("gpu_ram", 0) >= min_gpu_ram
+                and o.get("dph_total", 999) <= max_price
+                and o.get("rentable", False) == True
+            ]
+            return filtered
 
     async def rent_instance(
         self,
@@ -34,25 +40,26 @@ class VastService:
         disk_gb: int = 50
     ) -> dict:
         """Rent a GPU instance."""
-        async with httpx.AsyncClient() as client:
+        async with httpx.AsyncClient(follow_redirects=True, timeout=30.0) as client:
             resp = await client.put(
                 f"{VAST_API_URL}/asks/{offer_id}/",
                 headers=self.headers,
                 json={
-                    "client_id": "me",
                     "image": image,
                     "disk": disk_gb,
-                    "onstart": "cd /workspace && ./startup.sh"
+                    "runtype": "ssh"
                 }
             )
-            resp.raise_for_status()
+            if resp.status_code != 200:
+                error_data = resp.json() if resp.headers.get("content-type", "").startswith("application/json") else {"msg": resp.text}
+                raise Exception(f"Vast.ai error: {error_data.get('msg', resp.text)}")
             return resp.json()
 
     async def get_instances(self) -> list[dict]:
         """Get all running instances."""
-        async with httpx.AsyncClient() as client:
+        async with httpx.AsyncClient(follow_redirects=True) as client:
             resp = await client.get(
-                f"{VAST_API_URL}/instances",
+                f"{VAST_API_URL}/instances/",
                 headers=self.headers,
                 params={"owner": "me"}
             )
@@ -69,7 +76,7 @@ class VastService:
 
     async def destroy_instance(self, instance_id: int) -> bool:
         """Terminate an instance."""
-        async with httpx.AsyncClient() as client:
+        async with httpx.AsyncClient(follow_redirects=True) as client:
             resp = await client.delete(
                 f"{VAST_API_URL}/instances/{instance_id}/",
                 headers=self.headers

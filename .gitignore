@@ -8,3 +8,9 @@ dist/
 build/
 *.egg-info/
 .DS_Store
+
+# Credentials - never commit
+gcs-credentials.json
+*-credentials.json
+*.pem
+*.key

@@ -4,10 +4,22 @@ import os
 
 class GCSService:
     def __init__(self):
-        self.client = storage.Client.from_service_account_json(
-            settings.gcs_credentials_path
-        )
-        self.bucket = self.client.bucket(settings.gcs_bucket)
+        self._client = None
+        self._bucket = None
+
+    @property
+    def client(self):
+        if self._client is None:
+            self._client = storage.Client.from_service_account_json(
+                settings.gcs_credentials_path
+            )
+        return self._client
+
+    @property
+    def bucket(self):
+        if self._bucket is None:
+            self._bucket = self.client.bucket(settings.gcs_bucket)
+        return self._bucket
 
     def list_datasets(self) -> list[dict]:
         """List all datasets in the datasets/ prefix."""
