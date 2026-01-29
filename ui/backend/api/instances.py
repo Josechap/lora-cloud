@@ -17,6 +17,11 @@ class TunnelRequest(BaseModel):
     local_port: int
     ssh_key_path: str
 
+class GPUSearchRequest(BaseModel):
+    gpu_type: str = "RTX 4090"
+    min_gpu_ram: int = 24
+    max_price: float = 1.0
+
 @router.get("")
 async def list_instances():
     """List all running instances."""
@@ -89,3 +94,33 @@ async def close_tunnel(instance_id: int):
     """Close SSH tunnel."""
     ssh_service.close_tunnel(instance_id)
     return {"status": "closed"}
+
+@router.post("/search")
+async def search_gpus(req: GPUSearchRequest):
+    """Search for available GPU offers."""
+    offers = await vast_service.search_gpus(
+        gpu_name=req.gpu_type,
+        min_gpu_ram=req.min_gpu_ram,
+        max_price=req.max_price
+    )
+    # Sort by price
+    sorted_offers = sorted(offers, key=lambda x: x.get("dph_total", 999))
+    return {
+        "count": len(sorted_offers),
+        "offers": sorted_offers[:20]  # Limit to top 20
+    }
+
+@router.get("/{instance_id}/ssh")
+async def get_ssh_info(instance_id: int):
+    """Get SSH connection info for an instance."""
+    instance = await vast_service.get_instance(instance_id)
+    if not instance:
+        raise HTTPException(404, "Instance not found")
+
+    return {
+        "host": instance.get("ssh_host"),
+        "port": instance.get("ssh_port"),
+        "command": f"ssh -p {instance.get('ssh_port')} root@{instance.get('ssh_host')}",
+        "status": instance.get("cur_state"),
+        "jupyter_token": instance.get("jupyter_token")
+    }

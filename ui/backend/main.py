@@ -3,8 +3,9 @@ from fastapi.middleware.cors import CORSMiddleware
 from api.instances import router as instances_router
 from api.datasets import router as datasets_router
 from api.loras import router as loras_router
+from api.training import router as training_router
 
-app = FastAPI(title="LoRA Cloud")
+app = FastAPI(title="LoRA Cloud", version="1.0.0")
 
 app.add_middleware(
     CORSMiddleware,
@@ -17,6 +18,7 @@ app.add_middleware(
 app.include_router(instances_router, prefix="/api")
 app.include_router(datasets_router, prefix="/api")
 app.include_router(loras_router, prefix="/api")
+app.include_router(training_router, prefix="/api")
 
 @app.get("/health")
 def health():

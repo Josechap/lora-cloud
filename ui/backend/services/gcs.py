@@ -1,5 +1,6 @@
 from google.cloud import storage
 from config import settings
+from datetime import timedelta
 import os
 
 class GCSService:
@@ -24,10 +25,21 @@ class GCSService:
     def list_datasets(self) -> list[dict]:
         """List all datasets in the datasets/ prefix."""
         blobs = self.bucket.list_blobs(prefix="datasets/", delimiter="/")
+        # Must consume iterator before accessing prefixes
+        list(blobs)
         datasets = []
         for prefix in blobs.prefixes:
             name = prefix.replace("datasets/", "").rstrip("/")
-            datasets.append({"name": name, "path": prefix})
+            # Count files in dataset
+            dataset_blobs = list(self.bucket.list_blobs(prefix=prefix))
+            file_count = len(dataset_blobs)
+            total_size = sum(b.size for b in dataset_blobs)
+            datasets.append({
+                "name": name,
+                "path": prefix,
+                "file_count": file_count,
+                "total_size": total_size
+            })
         return datasets
 
     def list_loras(self) -> list[dict]:
@@ -58,5 +70,35 @@ class GCSService:
         """Delete a file from GCS."""
         blob = self.bucket.blob(remote_path)
         blob.delete()
+
+    def get_dataset_files(self, name: str) -> list[dict]:
+        """Get all files in a dataset."""
+        blobs = self.bucket.list_blobs(prefix=f"datasets/{name}/")
+        files = []
+        for blob in blobs:
+            files.append({
+                "name": blob.name.split("/")[-1],
+                "path": blob.name,
+                "size": blob.size,
+                "updated": blob.updated.isoformat() if blob.updated else None
+            })
+        return files
+
+    def get_signed_url(self, remote_path: str, expiration_minutes: int = 60) -> str:
+        """Generate a signed URL for downloading a file."""
+        blob = self.bucket.blob(remote_path)
+        return blob.generate_signed_url(
+            expiration=timedelta(minutes=expiration_minutes),
+            method="GET"
+        )
+
+    def get_upload_signed_url(self, remote_path: str, expiration_minutes: int = 60) -> str:
+        """Generate a signed URL for uploading a file."""
+        blob = self.bucket.blob(remote_path)
+        return blob.generate_signed_url(
+            expiration=timedelta(minutes=expiration_minutes),
+            method="PUT",
+            content_type="application/octet-stream"
+        )
 
 gcs_service = GCSService()
