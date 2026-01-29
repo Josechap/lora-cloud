@@ -1,0 +1,7 @@
+# Concept LoRA preset - for objects/concepts
+model = "black-forest-labs/FLUX.1-dev"
+learning_rate = 8e-5
+max_steps = 1200
+network_dim = 32
+network_alpha = 16
+repeats = 15
