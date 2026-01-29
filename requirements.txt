@@ -1,0 +1,16 @@
+# Backend
+fastapi==0.109.0
+uvicorn[standard]==0.27.0
+python-multipart==0.0.6
+websockets==12.0
+httpx==0.26.0
+python-dotenv==1.0.0
+
+# vast.ai & cloud
+google-cloud-storage==2.14.0
+paramiko==3.4.0
+sshtunnel==0.4.0
+
+# Utils
+pydantic==2.5.3
+pydantic-settings==2.1.0
