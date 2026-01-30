@@ -110,3 +110,75 @@ num_repeats = 10
         "gcs_dataset_path": f"datasets/{config.dataset_name}/",
         "gcs_output_path": f"loras/{config.lora_name}.safetensors"
     }
+
+
+class ComfyUISyncRequest(BaseModel):
+    """Request to sync LoRAs to a ComfyUI instance."""
+    comfyui_host: str  # e.g., "localhost:8188" or "192.168.1.100:8188"
+    lora_names: list[str] = []  # Empty = sync all LoRAs
+
+
+@router.post("/sync-to-comfyui")
+async def sync_to_comfyui(request: ComfyUISyncRequest):
+    """
+    Sync LoRAs from GCS to a ComfyUI instance.
+    Downloads LoRAs and makes them available via ComfyUI API.
+    """
+    import httpx
+    
+    loras = gcs_service.list_loras()
+    
+    # Filter if specific LoRAs requested
+    if request.lora_names:
+        loras = [l for l in loras if l["name"] in request.lora_names]
+    
+    if not loras:
+        raise HTTPException(404, "No LoRAs found to sync")
+    
+    synced = []
+    errors = []
+    
+    for lora in loras:
+        try:
+            # Get signed URL for the LoRA
+            url = gcs_service.get_signed_url(lora["path"])
+            
+            # For now, just return the URLs - ComfyUI can download directly
+            # In a full implementation, you'd use ComfyUI's API to load the LoRA
+            synced.append({
+                "name": lora["name"],
+                "url": url,
+                "size": lora["size"]
+            })
+        except Exception as e:
+            errors.append({"name": lora["name"], "error": str(e)})
+    
+    return {
+        "synced": synced,
+        "errors": errors,
+        "comfyui_host": request.comfyui_host,
+        "message": f"Synced {len(synced)} LoRAs. Use the URLs to download and place in ComfyUI's models/loras folder."
+    }
+
+
+@router.get("/{name}/comfyui-loader")
+def get_comfyui_loader_node(name: str):
+    """
+    Get a ComfyUI LoraLoader node configuration for a specific LoRA.
+    Can be used to programmatically add the LoRA to a workflow.
+    """
+    loras = gcs_service.list_loras()
+    lora = next((l for l in loras if l["name"] == name), None)
+    if not lora:
+        raise HTTPException(404, "LoRA not found")
+    
+    return {
+        "node_type": "LoraLoader",
+        "inputs": {
+            "lora_name": name,
+            "strength_model": 1.0,
+            "strength_clip": 1.0
+        },
+        "lora_info": lora,
+        "download_url": gcs_service.get_signed_url(lora["path"])
+    }

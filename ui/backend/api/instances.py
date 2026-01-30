@@ -3,6 +3,9 @@ from pydantic import BaseModel
 from services.vast import vast_service
 from services.ssh import ssh_service
 from typing import Optional
+import logging
+
+logger = logging.getLogger(__name__)
 
 router = APIRouter(prefix="/instances", tags=["instances"])
 
@@ -15,7 +18,7 @@ class LaunchRequest(BaseModel):
 class TunnelRequest(BaseModel):
     remote_port: int
     local_port: int
-    ssh_key_path: str
+    ssh_key_path: Optional[str] = None  # Uses default key if not provided
 
 class GPUSearchRequest(BaseModel):
     gpu_type: str = "RTX 4090"
@@ -75,19 +78,34 @@ async def destroy_instance(instance_id: int):
 @router.post("/{instance_id}/tunnel")
 async def create_tunnel(instance_id: int, req: TunnelRequest):
     """Create SSH tunnel to instance."""
+    logger.info(f"Creating tunnel for instance {instance_id}: remote={req.remote_port}, local={req.local_port}")
+    
     instance = await vast_service.get_instance(instance_id)
     if not instance:
         raise HTTPException(404, "Instance not found")
 
-    local_port = ssh_service.create_tunnel(
-        instance_id=instance_id,
-        ssh_host=instance["ssh_host"],
-        ssh_port=instance["ssh_port"],
-        remote_port=req.remote_port,
-        local_port=req.local_port,
-        ssh_key_path=req.ssh_key_path
-    )
-    return {"local_port": local_port}
+    ssh_host = instance.get("ssh_host")
+    ssh_port = instance.get("ssh_port")
+    
+    if not ssh_host or not ssh_port:
+        raise HTTPException(400, f"Instance SSH not available. State: {instance.get('cur_state')}")
+    
+    logger.info(f"Instance SSH info: {ssh_host}:{ssh_port}")
+    
+    try:
+        local_port = ssh_service.create_tunnel(
+            instance_id=instance_id,
+            ssh_host=ssh_host,
+            ssh_port=ssh_port,
+            remote_port=req.remote_port,
+            local_port=req.local_port,
+            ssh_key_path=req.ssh_key_path  # None = use default key
+        )
+        logger.info(f"Tunnel created successfully on local port {local_port}")
+        return {"local_port": local_port}
+    except Exception as e:
+        logger.error(f"Failed to create tunnel: {e}", exc_info=True)
+        raise HTTPException(500, f"Failed to create tunnel: {str(e)}")
 
 @router.delete("/{instance_id}/tunnel")
 async def close_tunnel(instance_id: int):
